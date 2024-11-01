@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_midi_pro/flutter_midi_pro_platform_interface.dart';
@@ -16,7 +17,32 @@ import 'package:path_provider/path_provider.dart';
 ///
 /// To dispose of the FlutterMidiPro instance, you can use the [dispose] method.
 class MidiPro {
-  MidiPro();
+  MidiPro() {
+    _initEventChannel();
+  }
+
+  /// Event channel for audio interruption notifications
+  static const EventChannel _eventChannel = EventChannel('flutter_midi_pro_events');
+  
+  /// Stream controller for audio interruption events
+  final _audioInterruptionController = StreamController<bool>.broadcast();
+
+  /// Stream of audio interruption events
+  /// 
+  /// Emits `true` when audio is interrupted (e.g., by a phone call)
+  /// Emits `false` when the interruption ends
+  Stream<bool> get onAudioInterruption => _audioInterruptionController.stream;
+
+  /// Initialize the event channel for audio interruption notifications
+  void _initEventChannel() {
+    _eventChannel.receiveBroadcastStream().listen((dynamic event) {
+      if (event is Map && event['event'] == 'audioInterrupted') {
+        _audioInterruptionController.add(event['interrupted'] as bool);
+      }
+    }, onError: (dynamic error) {
+      print('Error receiving audio interruption events: $error');
+    });
+  }
 
   /// Loads a soundfont file from the specified path.
   /// Returns the sfId (SoundfontSamplerId).
@@ -113,6 +139,7 @@ class MidiPro {
   /// After disposing of the instance, the instance should not be used again.
   ///
   Future<void> dispose() async {
+    await _audioInterruptionController.close();
     return FlutterMidiProPlatform.instance.dispose();
   }
 }

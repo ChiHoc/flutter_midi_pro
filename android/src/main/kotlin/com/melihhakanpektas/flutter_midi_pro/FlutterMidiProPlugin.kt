@@ -1,11 +1,15 @@
 package com.melihhakanpektas.flutter_midi_pro
 
 import android.content.Context
+import android.media.AudioFocusRequest
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import android.media.AudioManager
+import android.media.AudioAttributes
+import android.os.Build
+import io.flutter.plugin.common.EventChannel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -36,24 +40,107 @@ class FlutterMidiProPlugin: FlutterPlugin, MethodCallHandler {
   }
 
   private lateinit var channel : MethodChannel
+  private lateinit var eventChannel: EventChannel
   private lateinit var flutterPluginBinding: FlutterPlugin.FlutterPluginBinding
+  private var eventSink: EventChannel.EventSink? = null
+  private var audioManager: AudioManager? = null
+  private var audioFocusRequest: AudioFocusRequest? = null
+  private var hasAudioFocus = false
+  
+  // Audio focus change listener
+  private val afChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+    when (focusChange) {
+      AudioManager.AUDIOFOCUS_LOSS,
+      AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+        hasAudioFocus = false
+        eventSink?.success(mapOf(
+          "event" to "audioInterrupted",
+          "interrupted" to true
+        ))
+      }
+      AudioManager.AUDIOFOCUS_GAIN -> {
+        hasAudioFocus = true
+        eventSink?.success(mapOf(
+          "event" to "audioInterrupted",
+          "interrupted" to false
+        ))
+      }
+    }
+  }
 
   override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
     this.flutterPluginBinding = flutterPluginBinding
+    
+    // Setup method channel
     channel = MethodChannel(flutterPluginBinding.binaryMessenger, "flutter_midi_pro")
     channel.setMethodCallHandler(this)
-  }  
- override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+    
+    // Setup event channel
+    eventChannel = EventChannel(flutterPluginBinding.binaryMessenger, "flutter_midi_pro_events")
+    eventChannel.setStreamHandler(object : EventChannel.StreamHandler {
+      override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+        eventSink = events
+      }
+      override fun onCancel(arguments: Any?) {
+        eventSink = null
+      }
+    })
+    
+    // Setup audio manager and request initial focus
+    audioManager = flutterPluginBinding.applicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    hasAudioFocus = requestAudioFocus()
+  }
+
+  private fun requestAudioFocus(): Boolean {
+    if (hasAudioFocus) return true
+    
+    val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      val audioAttributes = AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_GAME)
+        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+        .build()
+
+      audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+        .setAudioAttributes(audioAttributes)
+        .setOnAudioFocusChangeListener(afChangeListener)
+        .build()
+
+      audioManager?.requestAudioFocus(audioFocusRequest!!) == AudioManager.AUDIOFOCUS_GAIN
+    } else {
+      @Suppress("DEPRECATION")
+      audioManager?.requestAudioFocus(
+        afChangeListener,
+        AudioManager.STREAM_MUSIC,
+        AudioManager.AUDIOFOCUS_GAIN
+      ) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+    }
+    
+    hasAudioFocus = result
+    return result
+  }
+
+  private fun abandonAudioFocus() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      audioFocusRequest?.let { request ->
+        audioManager?.abandonAudioFocusRequest(request)
+      }
+    } else {
+      @Suppress("DEPRECATION")
+      audioManager?.abandonAudioFocus(afChangeListener)
+    }
+  }
+
+  override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
     when (call.method) {
       "loadSoundfont" -> {
         CoroutineScope(Dispatchers.Main).launch {
-        val path = call.argument<String>("path") as String
-        val bank = call.argument<Int>("bank")?:0
-        val program = call.argument<Int>("program")?:0
-        val audioManager = flutterPluginBinding.applicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        val currentVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0)
-        val sfId = loadSoundfont(path, bank, program)
+          val path = call.argument<String>("path") as String
+          val bank = call.argument<Int>("bank")?:0
+          val program = call.argument<Int>("program")?:0
+          val audioManager = flutterPluginBinding.applicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+          val currentVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+          audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0)
+          val sfId = loadSoundfont(path, bank, program)
           delay(1000L)
           audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, currentVolume, 0)
           if (sfId == -1) {
@@ -77,6 +164,15 @@ class FlutterMidiProPlugin: FlutterPlugin, MethodCallHandler {
         val velocity = call.argument<Int>("velocity")
         val sfId = call.argument<Int>("sfId")
         if (channel != null && key != null && velocity != null && sfId != null) {
+          // Check and request audio focus before playing
+          if (!hasAudioFocus && !requestAudioFocus()) {
+            result.error(
+              "AUDIO_FOCUS_DENIED",
+              "Failed to obtain audio focus",
+              null
+            )
+            return
+          }
           playNote(channel, key, velocity, sfId)
           result.success(null)
         } else {
@@ -113,5 +209,8 @@ class FlutterMidiProPlugin: FlutterPlugin, MethodCallHandler {
 
   override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
     channel.setMethodCallHandler(null)
+    abandonAudioFocus()
+    hasAudioFocus = false
+    eventSink = null
   }
 }
