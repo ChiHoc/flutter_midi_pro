@@ -32,6 +32,11 @@ class MethodChannelFlutterMidiPro extends FlutterMidiProPlatform {
   }
 
   @override
+  Future<void> stopAllNotes(int channel, int sfId) async {
+    await _channel.invokeMethod('stopAllNotes', {'channel': channel, 'sfId': sfId});
+  }
+
+  @override
   Future<void> unloadSoundfont(int sfId) async {
     await _channel.invokeMethod('unloadSoundfont', {'sfId': sfId});
   }

@@ -37,6 +37,9 @@ class FlutterMidiProPlugin: FlutterPlugin, MethodCallHandler {
     private external fun unloadSoundfont(sfId: Int)
     @JvmStatic
     private external fun dispose()
+
+    @JvmStatic
+    private external fun stopAllNotes(channel: Int, sfId: Int)
   }
 
   private lateinit var channel : MethodChannel
@@ -202,6 +205,16 @@ class FlutterMidiProPlugin: FlutterPlugin, MethodCallHandler {
       "dispose" -> {
         dispose()
         result.success(null)
+      }
+      "stopAllNotes" -> {
+        val channel = call.argument<Int>("channel") ?: 0
+        val sfId = call.argument<Int>("sfId")
+        if (sfId != null) {
+          stopAllNotes(channel, sfId)
+          result.success(null)
+        } else {
+          result.error("INVALID_ARGUMENT", "sfId is required", null)
+        }
       }
       else -> result.notImplemented()
     }

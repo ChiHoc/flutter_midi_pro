@@ -64,3 +64,12 @@ Java_com_melihhakanpektas_flutter_1midi_1pro_FlutterMidiProPlugin_dispose(JNIEnv
     soundfonts.clear();
     settings.clear();
 }
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_melihhakanpektas_flutter_1midi_1pro_FlutterMidiProPlugin_stopAllNotes(
+    JNIEnv* env, jclass clazz, jint channel, jint sfId) {
+    // Send all notes off message
+    fluid_synth_all_notes_off(synths[sfId], channel);
+    // Also send all sounds off message for complete silence
+    fluid_synth_all_sounds_off(synths[sfId], channel);
+}

@@ -125,6 +125,18 @@ class MidiPro {
     return FlutterMidiProPlatform.instance.stopNote(channel, key, sfId);
   }
 
+  /// Stops all notes on the specified channel.
+  /// The channel is a number from 0 to 15.
+  /// The sfId is the soundfont ID returned by loadSoundfont.
+  Future<void> stopAllNotes({
+    /// The MIDI channel. This is a number from 0 to 15. Channel numbers start at 0.
+    int channel = 0,
+    /// The soundfont ID. First soundfont loaded is 1.
+    required int sfId,
+  }) async {
+    return FlutterMidiProPlatform.instance.stopAllNotes(channel, sfId);
+  }
+
   /// Unloads a soundfont from memory.
   /// The soundfont ID is the ID returned by the [loadSoundfont] method.
   /// If resetPresets is true, the presets will be reset to the default values.

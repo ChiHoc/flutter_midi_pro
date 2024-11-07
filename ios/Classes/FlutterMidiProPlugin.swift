@@ -185,6 +185,16 @@ public class FlutterMidiProPlugin: NSObject, FlutterPlugin {
             audioEngines = [:]
             soundfontSamplers = [:]
             result(nil)
+        case "stopAllNotes":
+            // Stop all notes on the specified channel
+            let args = call.arguments as! [String: Any]
+            let channel = args["channel"] as! Int
+            let sfId = args["sfId"] as! Int
+            let soundfontSampler = soundfontSamplers[sfId]![channel]
+            
+            // Send all notes off message (MIDI CC #123)
+            soundfontSampler.sendController(123, withValue: 0, onChannel: UInt8(channel))
+            result(nil)
         default:
             result(FlutterMethodNotImplemented)
             break
