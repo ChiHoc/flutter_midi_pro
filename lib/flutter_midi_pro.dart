@@ -36,7 +36,7 @@ class MidiPro {
   /// Initialize the event channel for audio interruption notifications
   void _initEventChannel() {
     _eventChannel.receiveBroadcastStream().listen((dynamic event) {
-      if (event is Map && event['event'] == 'audioInterrupted') {
+      if (!_audioInterruptionController.isClosed && event is Map && event['event'] == 'audioInterrupted') {
         _audioInterruptionController.add(event['interrupted'] as bool);
       }
     }, onError: (dynamic error) {
