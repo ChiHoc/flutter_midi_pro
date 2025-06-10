@@ -28,7 +28,7 @@ abstract class FlutterMidiProPlatform extends PlatformInterface {
     throw UnimplementedError('stopNote() has not been implemented.');
   }
 
-  Future<void> stopAllNotes(int channel, int sfId) {
+  Future<void> stopAllNotes(int sfId) {
     throw UnimplementedError('stopAllNotes() has not been implemented.');
   }
 

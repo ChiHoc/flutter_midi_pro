@@ -32,8 +32,8 @@ class MethodChannelFlutterMidiPro extends FlutterMidiProPlatform {
   }
 
   @override
-  Future<void> stopAllNotes(int channel, int sfId) async {
-    await _channel.invokeMethod('stopAllNotes', {'channel': channel, 'sfId': sfId});
+  Future<void> stopAllNotes(int sfId) async {
+    await _channel.invokeMethod('stopAllNotes', {'sfId': sfId});
   }
 
   @override

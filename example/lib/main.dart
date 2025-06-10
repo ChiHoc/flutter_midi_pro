@@ -31,7 +31,8 @@ class _MyAppState extends State<MyApp> {
       print('Soundfont file: $path already loaded. Returning ID.');
       return loadedSoundfonts.value.entries.firstWhere((element) => element.value == path).key;
     }
-    final int sfId = await midiPro.loadSoundfont(path: path, bank: bank, program: program);
+    final int sfId =
+        await midiPro.loadSoundfontAsset(assetPath: path, bank: bank, program: program);
     loadedSoundfonts.value = {sfId: path, ...loadedSoundfonts.value};
     print('Loaded soundfont file: $path with ID: $sfId');
     return sfId;
@@ -79,6 +80,16 @@ class _MyAppState extends State<MyApp> {
       sfIdValue = loadedSoundfonts.value.keys.first;
     }
     await midiPro.stopNote(channel: channel, key: key, sfId: sfIdValue);
+  }
+
+  Future<void> stopAllNote({
+    int sfId = 1,
+  }) async {
+    int? sfIdValue = sfId;
+    if (!loadedSoundfonts.value.containsKey(sfId)) {
+      sfIdValue = loadedSoundfonts.value.keys.first;
+    }
+    await midiPro.stopAllNotes(sfId: sfIdValue);
   }
 
   /// Unloads a soundfont file.
@@ -291,12 +302,19 @@ class _MyAppState extends State<MyApp> {
                                     })),
                             Padding(
                               padding: const EdgeInsets.all(8),
-                              child: ElevatedButton(
+                              child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [ElevatedButton(
                                 onPressed: !(selectedSfIdValue != null)
                                     ? null
                                     : () => unloadSoundfont(loadedSoundfonts.value.keys.first),
                                 child: const Text('Unload Soundfont file'),
-                              ),
+                              ),ElevatedButton(
+                                onPressed: !(selectedSfIdValue != null)
+                                    ? null
+                                    : () => stopAllNote(),
+                                child: const Text('Stop all note'),
+                              ),]),
                             ),
                             Stack(
                               children: [

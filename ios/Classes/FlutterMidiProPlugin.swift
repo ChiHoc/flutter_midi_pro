@@ -113,21 +113,15 @@ public class FlutterMidiProPlugin: NSObject, FlutterPlugin {
             eventSink?(["event": "audioInterrupted", "interrupted": true])
             
         case .ended:
-            // Check if we can resume audio
-            if let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt {
-                let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
-                if options.contains(.shouldResume) {
-                    // Reconfigure audio session
-                    configureAudioSession()
-                    
-                    // Restart all audio engines
-                    restartAudioEngines()
-                    isAudioEngineRunning = true
-                    
-                    // Notify Flutter about interruption ended
-                    eventSink?(["event": "audioInterrupted", "interrupted": false])
-                }
-            }
+            // Reconfigure audio session
+            configureAudioSession()
+            
+            // Restart all audio engines
+            restartAudioEngines()
+            isAudioEngineRunning = true
+            
+            // Notify Flutter about interruption ended
+            eventSink?(["event": "audioInterrupted", "interrupted": false])
             
         default:
             break
@@ -313,17 +307,18 @@ public class FlutterMidiProPlugin: NSObject, FlutterPlugin {
         case "stopAllNotes":
             // Stop all notes on the specified channel
             guard let args = call.arguments as? [String: Any],
-                  let channel = args["channel"] as? Int,
                   let sfId = args["sfId"] as? Int,
-                  let soundfontSamplers = soundfontSamplers[sfId],
-                  channel >= 0 && channel < soundfontSamplers.count else {
+                  let soundfontSamplers = soundfontSamplers[sfId] else {
                 result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid arguments for stopAllNotes", details: nil))
                 return
             }
             
-            let soundfontSampler = soundfontSamplers[channel]
-            // Send all notes off message (MIDI CC #123)
-            soundfontSampler.sendController(123, withValue: 0, onChannel: UInt8(channel))
+            let allNotesOffCC: UInt8 = 123
+            for channel in 0...15 {
+                let soundfontSampler = soundfontSamplers[channel]
+                // Send all notes off message (MIDI CC #123)
+                soundfontSampler.sendController(allNotesOffCC, withValue: 0, onChannel: UInt8(channel))
+            }
             result(nil)
         default:
             result(FlutterMethodNotImplemented)

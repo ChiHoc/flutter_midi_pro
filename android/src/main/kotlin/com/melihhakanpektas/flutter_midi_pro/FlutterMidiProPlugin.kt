@@ -14,6 +14,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** FlutterMidiProPlugin */
 class FlutterMidiProPlugin: FlutterPlugin, MethodCallHandler {
@@ -34,12 +35,11 @@ class FlutterMidiProPlugin: FlutterPlugin, MethodCallHandler {
     private external fun stopNote(channel: Int, key: Int, sfId: Int)
 
     @JvmStatic
-    private external fun unloadSoundfont(sfId: Int)
-    @JvmStatic
-    private external fun dispose()
+    private external fun stopAllNotes(sfId: Int)
 
     @JvmStatic
-    private external fun stopAllNotes(channel: Int, sfId: Int)
+    private external fun unloadSoundfont(sfId: Int)
+    @JvmStatic
   }
 
   private lateinit var channel : MethodChannel
@@ -136,20 +136,29 @@ class FlutterMidiProPlugin: FlutterPlugin, MethodCallHandler {
   override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
     when (call.method) {
       "loadSoundfont" -> {
-        CoroutineScope(Dispatchers.Main).launch {
+        CoroutineScope(Dispatchers.IO).launch {
           val path = call.argument<String>("path") as String
           val bank = call.argument<Int>("bank")?:0
           val program = call.argument<Int>("program")?:0
           val audioManager = flutterPluginBinding.applicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-          val currentVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-          audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0)
+          
+          // Sesi mute yapma
+          audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0)
+          
+          // Soundfont yükleme işlemi (senkron, bloke eden çağrı)
           val sfId = loadSoundfont(path, bank, program)
-          delay(1000L)
-          audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, currentVolume, 0)
-          if (sfId == -1) {
-            result.error("INVALID_ARGUMENT", "Something went wrong. Check the path of the template soundfont", null)
-          } else {
-            result.success(sfId)
+          delay(250)
+          
+          // Sesi tekrar açma
+          audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0)
+          
+          // Sonucu ana thread'de Flutter'a iletme
+          withContext(Dispatchers.Main) {
+            if (sfId == -1) {
+              result.error("INVALID_ARGUMENT", "Something went wrong. Check the path of the template soundfont", null)
+            } else {
+              result.success(sfId)
+            }
           }
         }
       }
@@ -193,6 +202,15 @@ class FlutterMidiProPlugin: FlutterPlugin, MethodCallHandler {
           result.error("INVALID_ARGUMENT", "channel and key are required", null)
         }
       }
+      "stopAllNotes" -> {
+        val sfId = call.argument<Int>("sfId")
+        if (sfId != null) {
+          stopAllNotes(sfId)
+          result.success(null)
+        } else {
+          result.error("INVALID_ARGUMENT", "sfId is required", null)
+        }
+      }
       "unloadSoundfont" -> {
         val sfId = call.argument<Int>("sfId")
         if (sfId != null) {
@@ -205,16 +223,6 @@ class FlutterMidiProPlugin: FlutterPlugin, MethodCallHandler {
       "dispose" -> {
         dispose()
         result.success(null)
-      }
-      "stopAllNotes" -> {
-        val channel = call.argument<Int>("channel") ?: 0
-        val sfId = call.argument<Int>("sfId")
-        if (sfId != null) {
-          stopAllNotes(channel, sfId)
-          result.success(null)
-        } else {
-          result.error("INVALID_ARGUMENT", "sfId is required", null)
-        }
       }
       else -> result.notImplemented()
     }
